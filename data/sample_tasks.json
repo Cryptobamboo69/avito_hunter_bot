@@ -1,0 +1,41 @@
+[
+  {
+    "name": "Nespresso Essenza Mini",
+    "search_url": "https://www.avito.ru/moskva?q=nespresso+essenza+mini+c30",
+    "max_price": 3000,
+    "city": "Москва",
+    "include_keywords": ["nespresso", "essenza", "mini", "c30", "delonghi"],
+    "exclude_keywords": ["vertuo", "совместим", "аналог", "3 в 1"],
+    "brand_filters": ["nespresso", "delonghi"],
+    "size_filters": [],
+    "min_score": 8,
+    "check_interval_sec": 120,
+    "enabled": true
+  },
+  {
+    "name": "Marsell 40-40.5",
+    "search_url": "https://www.avito.ru/moskva?q=marsell",
+    "max_price": null,
+    "city": "Москва",
+    "include_keywords": ["marsell", "муж", "40", "40.5"],
+    "exclude_keywords": ["жен", "реплика", "копия"],
+    "brand_filters": ["marsell"],
+    "size_filters": ["40", "40.5", "40,5"],
+    "min_score": 7,
+    "check_interval_sec": 180,
+    "enabled": true
+  },
+  {
+    "name": "Nespresso capsules",
+    "search_url": "https://www.avito.ru/moskva?q=nespresso+capsules",
+    "max_price": null,
+    "city": "Москва",
+    "include_keywords": ["nespresso", "capsule", "капсул"],
+    "exclude_keywords": ["vertuo"],
+    "brand_filters": ["nespresso", "l'or", "carte noire", "coffesso", "jacobs", "monarch"],
+    "size_filters": [],
+    "min_score": 6,
+    "check_interval_sec": 300,
+    "enabled": true
+  }
+]
