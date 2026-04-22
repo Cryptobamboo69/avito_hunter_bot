@@ -34,7 +34,7 @@ async def main() -> None:
     service = MonitorService(bot=bot, db=db, client=client, owner_chat_id=settings.bot_owner_chat_id)
 
     
-    bot["scheduler"] = scheduler
+    
     bot["service"] = service
 
     dp.include_router(common.router)
