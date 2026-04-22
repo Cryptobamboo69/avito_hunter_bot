@@ -1,4 +1,4 @@
-[22.04.2026 15:12] PF: from future import annotations
+from __future__ import annotations
 
 import asyncio
 import importlib
@@ -144,7 +144,7 @@ async def _build_scheduler(bot: ContextBot, db: Any) -> Any:
 
     # Вариант 2: класс Scheduler
     if hasattr(sched_module, "Scheduler"):
-[22.04.2026 15:12] PF: Scheduler = getattr(sched_module, "Scheduler")
+        Scheduler = getattr(sched_module, "Scheduler")
         attempts = [
             lambda: Scheduler(bot=bot, db=db),
             lambda: Scheduler(db=db, bot=bot),
@@ -276,10 +276,10 @@ async def main() -> None:
                         await _call_maybe_async(getattr(db, method_name))
                         break
                     except Exception as e:
-[22.04.2026 15:12] PF: logger.warning("Could not close db: %s", e)
+                        logger.warning("Could not close db: %s", e)
 
         await bot.session.close()
 
 
-if name == "__main__":
+if __name__ == "__main__":
     asyncio.run(main())
