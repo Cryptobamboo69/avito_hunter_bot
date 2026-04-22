@@ -33,7 +33,7 @@ async def main() -> None:
     scheduler = PollingScheduler()
     service = MonitorService(bot=bot, db=db, client=client, owner_chat_id=settings.bot_owner_chat_id)
 
-    bot["db"] = db
+    
     bot["scheduler"] = scheduler
     bot["service"] = service
 
