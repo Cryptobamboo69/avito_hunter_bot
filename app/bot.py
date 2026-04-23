@@ -5,15 +5,19 @@ import aiohttp
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.client.default import DefaultBotProperties
 
 from app.avito.search_client import fetch_html
 from app.avito.parser import parse_search_results
 
-TOKEN = "8782414898:AAHP3UM4xj5kEWt0vTkgAM_UuXXqMYBA6ws"
+TOKEN = "ТВОЙ_ТОКЕН"
 
 logging.basicConfig(level=logging.INFO)
 
-bot = Bot(token=TOKEN, parse_mode="HTML")
+bot = Bot(
+    token=TOKEN,
+    default=DefaultBotProperties(parse_mode="HTML")
+)
 dp = Dispatcher()
 
 # Хранилище задач (временно в памяти)
