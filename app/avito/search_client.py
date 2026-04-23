@@ -29,3 +29,14 @@ class AvitoSearchClient:
 
     async def close(self) -> None:
         await self._client.aclose()
+
+import aiohttp
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Accept-Language": "ru-RU,ru;q=0.9"
+}
+
+async def fetch_html(session: aiohttp.ClientSession, url: str) -> str:
+    async with session.get(url, headers=HEADERS) as response:
+        return await response.text()
