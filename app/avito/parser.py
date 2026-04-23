@@ -66,7 +66,7 @@ def _json_ld_item_to_listing(item: dict) -> Listing | None:
 
 
 def _from_links(soup):
-    results = []
+    results: list[Listing] = []
 
     for a in soup.find_all("a", href=True):
         href = a["href"]
@@ -79,16 +79,30 @@ def _from_links(soup):
         else:
             url = href
 
-        title = a.get_text(strip=True)
-        if not title or len(title) < 10:
+        text = a.get_text(" ", strip=True)
+        if not text:
             continue
 
-        results.append({
-            "url": url,
-            "title": title
-        })
+        price = parse_price(text)
 
-    return results
+        title = text
+        if not title:
+            continue
+
+        results.append(
+            Listing(
+                external_id=url,
+                title=title,
+                url=url,
+                price=price,
+                location=None,
+                description=None,
+                image_url=None,
+                raw={"href": href, "text": text},
+            )
+        )
+
+    return _dedupe(results)
 
 
 def _dedupe(items: list[Listing]) -> list[Listing]:
