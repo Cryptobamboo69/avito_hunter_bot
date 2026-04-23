@@ -11,8 +11,7 @@ from aiogram.filters import Command
 from aiogram.client.default import DefaultBotProperties
 from aiogram.exceptions import TelegramBadRequest
 
-from app.avito.search_client import fetch_html
-from app.avito.parser import parse_search_results
+from app.service import process_task
 
 
 TOKEN = os.getenv("BOT_TOKEN", "").strip()
@@ -29,6 +28,8 @@ bot = Bot(
     default=DefaultBotProperties(parse_mode="HTML"),
 )
 dp = Dispatcher()
+
+waiting_for_json: set[int] = set()
 
 
 def get_conn():
@@ -83,9 +84,6 @@ def delete_task(task_id: int):
         return cur.rowcount > 0
 
 
-waiting_for_json = set()
-
-
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     await message.answer(
@@ -104,7 +102,7 @@ async def cmd_add_json(message: types.Message):
     await message.answer(
         "Пришли JSON следующим сообщением.\n\n"
         "Пример:\n"
-        '{"name":"nespresso","search_url":"https://www.avito.ru/moskva?q=nespresso&priceMax=3000","max_price":3000,"check_interval_sec":180}'
+        '{"name":"nespresso_c30","search_url":"https://www.avito.ru/moskva?q=nespresso+essenza+mini+c30+рабочая+без+дефектов&priceMax=3000","max_price":3000,"check_interval_sec":180}'
     )
 
 
@@ -112,7 +110,7 @@ async def cmd_add_json(message: types.Message):
 async def cmd_list(message: types.Message):
     tasks = list_tasks()
     if not tasks:
-        await message.answer("Задач нет.")
+        await message.answer("Задач пока нет.")
         return
 
     lines = []
@@ -147,7 +145,7 @@ async def cmd_delete(message: types.Message):
 async def cmd_checkall(message: types.Message):
     tasks = list_tasks()
     if not tasks:
-        await message.answer("Задач нет.")
+        await message.answer("Задач пока нет.")
         return
 
     await message.answer(f"Проверяем {len(tasks)} задач...")
@@ -162,6 +160,7 @@ async def cmd_checkall(message: types.Message):
                 "check_interval_sec": row[4],
             }
             await process_task(message, session, task)
+            await asyncio.sleep(1)
 
 
 @dp.message()
@@ -201,68 +200,10 @@ async def handle_json(message: types.Message):
         await message.answer(f"Ошибка JSON: {e}")
 
 
-async def process_task(message: types.Message, session: aiohttp.ClientSession, task: dict):
-    try:
-        html = await fetch_html(session, task["search_url"])
-        items = parse_search_results(html)
-
-        if not items:
-            await message.answer(f"{task['name']}: ничего не найдено.")
-            return
-
-        sent = 0
-
-        for item in items:
-            title = ""
-            price_value = None
-            link = ""
-
-            if isinstance(item, dict):
-                title = item.get("title", "")
-                link = item.get("link", "")
-                price_raw = item.get("price", "")
-            else:
-                title = getattr(item, "title", "")
-                link = getattr(item, "url", "")
-                price_raw = getattr(item, "price", None)
-
-            if isinstance(price_raw, int):
-                price_value = price_raw
-            else:
-                digits = "".join(ch for ch in str(price_raw) if ch.isdigit())
-                price_value = int(digits) if digits else None
-
-            if task["max_price"] is not None and price_value is not None:
-                if price_value > int(task["max_price"]):
-                    continue
-
-            if not title or not link:
-                continue
-
-            text = (
-                f"<b>Новое объявление</b>\n"
-                f"Задача: {task['name']}\n"
-                f"Название: {title}\n"
-                f"Цена: {price_value if price_value is not None else 'не указана'} ₽\n"
-                f"Ссылка: {link}"
-            )
-
-            await message.answer(text)
-            sent += 1
-
-            if sent >= 5:
-                break
-
-        if sent == 0:
-            await message.answer(f"{task['name']}: подходящих объявлений нет.")
-
-    except Exception as e:
-        logger.exception("Task error")
-        await message.answer(f"Ошибка в задаче {task['name']}: {e}")
-
-
 async def main():
     init_db()
+
+    await bot.delete_webhook(drop_pending_updates=True)
 
     while True:
         try:
