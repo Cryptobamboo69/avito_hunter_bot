@@ -71,7 +71,7 @@ def _from_links(soup):
     for a in soup.find_all("a", href=True):
         href = a["href"]
 
-        if "/item/" not in href:
+        if "/moskva/" not in href:
             continue
 
         if href.startswith("/"):
