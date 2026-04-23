@@ -98,6 +98,8 @@ def _from_links(soup: BeautifulSoup) -> list[Listing]:
 
         if not title or len(title) < 5:
             continue
+            
+            from app.models import Listing
 results.append(
     Listing(
         external_id=url,
