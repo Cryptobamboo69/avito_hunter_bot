@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import re
+
 from bs4 import BeautifulSoup
 
 from app.models import Listing
@@ -58,6 +60,12 @@ def _json_ld_item_to_listing(item: dict) -> Listing | None:
     if not url or not title:
         return None
 
+    url = str(url)
+
+    # Только реальные объявления, а не разделы/категории/баннеры
+    if not _looks_like_listing_url(url):
+        return None
+
     external_id = str(item.get("sku") or item.get("position") or url)
 
     offers = item.get("offers") or {}
@@ -73,14 +81,13 @@ def _json_ld_item_to_listing(item: dict) -> Listing | None:
     return Listing(
         external_id=external_id,
         title=str(title),
-        url=str(url),
+        url=url,
         price=price,
         location=None,
         description=item.get("description"),
         image_url=image_url,
         raw=item,
     )
-
 
 
 def _from_links(soup: BeautifulSoup) -> list[Listing]:
@@ -92,11 +99,10 @@ def _from_links(soup: BeautifulSoup) -> list[Listing]:
         if not href:
             continue
 
-        # 👉 только ссылки с ID (реальные объявления)
-        if not re.search(r"/\d{7,}", href):
+        # Только ссылки, похожие на реальные объявления
+        if not _looks_like_listing_href(href):
             continue
 
-        # нормализация ссылки
         if href.startswith("/"):
             url = "https://www.avito.ru" + href
         elif href.startswith("http"):
@@ -104,39 +110,91 @@ def _from_links(soup: BeautifulSoup) -> list[Listing]:
         else:
             continue
 
-        # защита от мусора
+        if not _looks_like_listing_url(url):
+            continue
+
+        # Отсечь мусор/баннеры/промо
         if any(x in url for x in [
             "/travel",
             "/apps",
             "/profile",
             "/brands",
             "/favorites",
+            "/blocked",
+            "/support",
             "utm_",
+            "context=",
         ]):
             continue
 
         text = a.get_text(" ", strip=True)
-
-        if not text or len(text) < 10:
+        if not text:
             continue
 
-        title = text[:200]
+        title = text.strip()
+        if len(title) < 10:
+            continue
+
         price = parse_price(text)
 
         results.append(
             Listing(
                 external_id=url,
-                title=title,
+                title=title[:200],
                 url=url,
                 price=price,
                 location=None,
                 description=None,
                 image_url=None,
-                raw={"href": href},
+                raw={"href": href, "text": text},
             )
         )
 
     return _dedupe(results)
+
+
+def _looks_like_listing_href(href: str) -> bool:
+    href = href.lower()
+
+    # Классический паттерн объявления Авито: ..._1234567890
+    if re.search(r"_\d{7,}($|\?)", href):
+        return True
+
+    # Иногда попадаются такие варианты
+    if re.search(r"/item/\d{7,}", href):
+        return True
+
+    return False
+
+
+def _looks_like_listing_url(url: str) -> bool:
+    url = url.lower()
+
+    if "avito.ru" not in url:
+        return False
+
+    # Отсекаем явный мусор
+    if any(x in url for x in [
+        "/travel",
+        "/apps",
+        "/profile",
+        "/brands",
+        "/favorites",
+        "/blocked",
+        "/support",
+        "/help",
+        "/all/",
+    ]):
+        return False
+
+    if re.search(r"_\d{7,}($|\?)", url):
+        return True
+
+    if re.search(r"/item/\d{7,}", url):
+        return True
+
+    return False
+
 
 def _dedupe(items: list[Listing]) -> list[Listing]:
     result: list[Listing] = []
