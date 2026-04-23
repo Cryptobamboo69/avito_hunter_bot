@@ -98,19 +98,19 @@ def _from_links(soup: BeautifulSoup) -> list[Listing]:
 
         if not title or len(title) < 5:
             continue
-
-        results.append(
-            Listing(
-                external_id=url,
-                title=title,
-                url=url,
-                price=None,
-                location=None,
-                description=None,
-                image_url=None,
-                raw=None,
-            )
-        )
+results.append(
+    Listing(
+        external_id=url,
+        title=title,
+        url=url,
+        price=None,
+        location=None,
+        description=None,
+        image_url=None,
+        raw={}
+    )
+)
+        
 
     return _dedupe(results)
 
