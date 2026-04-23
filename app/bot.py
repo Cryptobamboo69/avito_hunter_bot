@@ -1,15 +1,13 @@
 import os
 import json
-import asyncio
 import logging
 import sqlite3
 from contextlib import closing
 
 import aiohttp
 from aiogram import Bot, Dispatcher, types
-from aiogram.filters import Command
 from aiogram.client.default import DefaultBotProperties
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.filters import Command
 
 from app.service import process_task
 
@@ -79,7 +77,10 @@ def list_tasks():
 
 def delete_task(task_id: int):
     with closing(get_conn()) as conn:
-        cur = conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+        cur = conn.execute(
+            "DELETE FROM tasks WHERE id = ?",
+            (task_id,),
+        )
         conn.commit()
         return cur.rowcount > 0
 
@@ -102,7 +103,7 @@ async def cmd_add_json(message: types.Message):
     await message.answer(
         "Пришли JSON следующим сообщением.\n\n"
         "Пример:\n"
-        '{"name":"nespresso_c30","search_url":"https://www.avito.ru/moskva?q=nespresso+essenza+mini+c30+рабочая+без+дефектов&priceMax=3000","max_price":3000,"check_interval_sec":180}'
+        '{"name":"nespresso_c30","search_url":"https://www.avito.ru/moskva?q=nespresso+essenza+mini+c30&priceMax=3000","max_price":3000,"check_interval_sec":180}'
     )
 
 
@@ -113,15 +114,15 @@ async def cmd_list(message: types.Message):
         await message.answer("Задач пока нет.")
         return
 
-    lines = []
+    parts = []
     for row in tasks:
-        lines.append(
+        parts.append(
             f"ID {row[0]} | {row[1]}\n"
             f"URL: {row[2]}\n"
             f"max_price={row[3]} | every={row[4]}s"
         )
 
-    await message.answer("\n\n".join(lines))
+    await message.answer("\n\n".join(parts))
 
 
 @dp.message(Command("delete"))
@@ -160,7 +161,7 @@ async def cmd_checkall(message: types.Message):
                 "check_interval_sec": row[4],
             }
             await process_task(message, session, task)
-            await asyncio.sleep(1)
+            await asyncio_sleep_safe()
 
 
 @dp.message()
@@ -200,25 +201,18 @@ async def handle_json(message: types.Message):
         await message.answer(f"Ошибка JSON: {e}")
 
 
+async def asyncio_sleep_safe():
+    import asyncio
+    await asyncio.sleep(1)
+
+
 async def main():
     init_db()
-
     await bot.delete_webhook(drop_pending_updates=True)
-
-    while True:
-        try:
-            logger.info("Bot started")
-            await dp.start_polling(bot)
-        except TelegramBadRequest as e:
-            if "logged out" in str(e).lower():
-                logger.warning("Bot logged out, retry in 5 sec")
-                await asyncio.sleep(5)
-                continue
-            raise
-        except Exception as e:
-            logger.exception("Bot crashed: %s", e)
-            await asyncio.sleep(5)
+    logger.info("Bot started")
+    await dp.start_polling(bot)
 
 
 if __name__ == "__main__":
+    import asyncio
     asyncio.run(main())
