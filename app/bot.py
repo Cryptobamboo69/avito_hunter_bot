@@ -1,136 +1,281 @@
+import os
+import json
 import asyncio
 import logging
-import aiohttp
+import sqlite3
+from contextlib import closing
 
+import aiohttp
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from aiogram.exceptions import TelegramBadRequest
 from aiogram.client.default import DefaultBotProperties
+from aiogram.exceptions import TelegramBadRequest
 
 from app.avito.search_client import fetch_html
 from app.avito.parser import parse_search_results
 
-TOKEN = "ТВОЙ_ТОКЕН"
+
+TOKEN = os.getenv("BOT_TOKEN", "").strip()
+DB_PATH = os.getenv("DB_PATH", "bot.db").strip()
+
+if not TOKEN:
+    raise RuntimeError("BOT_TOKEN is empty")
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 bot = Bot(
     token=TOKEN,
-    default=DefaultBotProperties(parse_mode="HTML")
+    default=DefaultBotProperties(parse_mode="HTML"),
 )
 dp = Dispatcher()
 
-# Хранилище задач (временно в памяти)
-tasks = []
-task_id_counter = 1
+
+def get_conn():
+    return sqlite3.connect(DB_PATH)
 
 
-# ======================
-# КОМАНДЫ
-# ======================
+def init_db():
+    with closing(get_conn()) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                search_url TEXT NOT NULL,
+                max_price INTEGER,
+                check_interval_sec INTEGER DEFAULT 180
+            )
+            """
+        )
+        conn.commit()
+
+
+def add_task(name: str, search_url: str, max_price: int | None, check_interval_sec: int):
+    with closing(get_conn()) as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO tasks (name, search_url, max_price, check_interval_sec)
+            VALUES (?, ?, ?, ?)
+            """,
+            (name, search_url, max_price, check_interval_sec),
+        )
+        conn.commit()
+        return cur.lastrowid
+
+
+def list_tasks():
+    with closing(get_conn()) as conn:
+        cur = conn.execute(
+            """
+            SELECT id, name, search_url, max_price, check_interval_sec
+            FROM tasks
+            ORDER BY id
+            """
+        )
+        return cur.fetchall()
+
+
+def delete_task(task_id: int):
+    with closing(get_conn()) as conn:
+        cur = conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+        conn.commit()
+        return cur.rowcount > 0
+
+
+waiting_for_json = set()
+
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    await message.answer("Бот запущен 🚀\n\nКоманды:\n/add\n/list\n/checkall")
+    await message.answer(
+        "Бот запущен.\n\n"
+        "Команды:\n"
+        "/add_json — добавить задачу JSON\n"
+        "/list — список задач\n"
+        "/delete ID — удалить задачу\n"
+        "/checkall — проверить все задачи"
+    )
 
 
-@dp.message(Command("add"))
-async def cmd_add(message: types.Message):
-    global task_id_counter
-
-    text = message.text.replace("/add", "").strip()
-    if not text:
-        await message.answer("Пример:\n/add nespresso https://avito.ru/... 3000")
-        return
-
-    try:
-        name, url, price = text.split(" ", 2)
-        price = int(price)
-    except:
-        await message.answer("Формат:\n/add название URL цена")
-        return
-
-    task = {
-        "id": task_id_counter,
-        "name": name,
-        "url": url,
-        "max_price": price,
-    }
-
-    tasks.append(task)
-    task_id_counter += 1
-
-    await message.answer(f"Задача добавлена. ID: {task['id']}")
+@dp.message(Command("add_json"))
+async def cmd_add_json(message: types.Message):
+    waiting_for_json.add(message.chat.id)
+    await message.answer(
+        "Пришли JSON следующим сообщением.\n\n"
+        "Пример:\n"
+        '{"name":"nespresso","search_url":"https://www.avito.ru/moskva?q=nespresso&priceMax=3000","max_price":3000,"check_interval_sec":180}'
+    )
 
 
 @dp.message(Command("list"))
 async def cmd_list(message: types.Message):
+    tasks = list_tasks()
     if not tasks:
-        await message.answer("Нет задач")
+        await message.answer("Задач нет.")
         return
 
-    text = ""
-    for t in tasks:
-        text += f"ID {t['id']} | {t['name']}\n"
-        text += f"{t['url']}\n"
-        text += f"max_price={t['max_price']}\n\n"
+    lines = []
+    for row in tasks:
+        lines.append(
+            f"ID {row[0]} | {row[1]}\n"
+            f"URL: {row[2]}\n"
+            f"max_price={row[3]} | every={row[4]}s"
+        )
 
-    await message.answer(text)
+    await message.answer("\n\n".join(lines))
+
+
+@dp.message(Command("delete"))
+async def cmd_delete(message: types.Message):
+    parts = (message.text or "").split()
+    if len(parts) != 2:
+        await message.answer("Формат: /delete ID")
+        return
+
+    try:
+        task_id = int(parts[1])
+    except ValueError:
+        await message.answer("ID должен быть числом.")
+        return
+
+    ok = delete_task(task_id)
+    await message.answer("Удалено." if ok else "Не найдено.")
 
 
 @dp.message(Command("checkall"))
 async def cmd_checkall(message: types.Message):
+    tasks = list_tasks()
+    if not tasks:
+        await message.answer("Задач нет.")
+        return
+
     await message.answer(f"Проверяем {len(tasks)} задач...")
 
     async with aiohttp.ClientSession() as session:
-        for task in tasks:
-            try:
-                html = await fetch_html(session, task["url"])
-                items = parse_search_results(html)
-
-                sent = 0
-
-                for item in items:
-                    if item.price is None:
-                        continue
-
-                    if item.price > task["max_price"]:
-                        continue
-
-                    text = f"""<b>{task['name']}</b>
-
-{item.title}
-Цена: {item.price} ₽
-{item.url}
-"""
-
-                    await message.answer(text)
-                    sent += 1
-
-                    if sent >= 5:
-                        break
-
-            except Exception as e:
-                await message.answer(f"Ошибка в задаче {task['name']}: {e}")
+        for row in tasks:
+            task = {
+                "id": row[0],
+                "name": row[1],
+                "search_url": row[2],
+                "max_price": row[3],
+                "check_interval_sec": row[4],
+            }
+            await process_task(message, session, task)
 
 
-# ======================
-# СТАРТ БОТА (ВАЖНО)
-# ======================
+@dp.message()
+async def handle_json(message: types.Message):
+    if message.chat.id not in waiting_for_json:
+        return
+
+    raw = (message.text or "").strip()
+
+    try:
+        data = json.loads(raw)
+
+        name = str(data["name"]).strip()
+        search_url = str(data["search_url"]).strip()
+        max_price = data.get("max_price")
+        check_interval_sec = int(data.get("check_interval_sec", 180))
+
+        if not name:
+            raise ValueError("name пустой")
+        if not search_url:
+            raise ValueError("search_url пустой")
+
+        if max_price is not None:
+            max_price = int(max_price)
+
+        task_id = add_task(
+            name=name,
+            search_url=search_url,
+            max_price=max_price,
+            check_interval_sec=check_interval_sec,
+        )
+
+        waiting_for_json.discard(message.chat.id)
+        await message.answer(f"Задача добавлена. ID: {task_id}")
+
+    except Exception as e:
+        await message.answer(f"Ошибка JSON: {e}")
+
+
+async def process_task(message: types.Message, session: aiohttp.ClientSession, task: dict):
+    try:
+        html = await fetch_html(session, task["search_url"])
+        items = parse_search_results(html)
+
+        if not items:
+            await message.answer(f"{task['name']}: ничего не найдено.")
+            return
+
+        sent = 0
+
+        for item in items:
+            title = ""
+            price_value = None
+            link = ""
+
+            if isinstance(item, dict):
+                title = item.get("title", "")
+                link = item.get("link", "")
+                price_raw = item.get("price", "")
+            else:
+                title = getattr(item, "title", "")
+                link = getattr(item, "url", "")
+                price_raw = getattr(item, "price", None)
+
+            if isinstance(price_raw, int):
+                price_value = price_raw
+            else:
+                digits = "".join(ch for ch in str(price_raw) if ch.isdigit())
+                price_value = int(digits) if digits else None
+
+            if task["max_price"] is not None and price_value is not None:
+                if price_value > int(task["max_price"]):
+                    continue
+
+            if not title or not link:
+                continue
+
+            text = (
+                f"<b>Новое объявление</b>\n"
+                f"Задача: {task['name']}\n"
+                f"Название: {title}\n"
+                f"Цена: {price_value if price_value is not None else 'не указана'} ₽\n"
+                f"Ссылка: {link}"
+            )
+
+            await message.answer(text)
+            sent += 1
+
+            if sent >= 5:
+                break
+
+        if sent == 0:
+            await message.answer(f"{task['name']}: подходящих объявлений нет.")
+
+    except Exception as e:
+        logger.exception("Task error")
+        await message.answer(f"Ошибка в задаче {task['name']}: {e}")
+
 
 async def main():
+    init_db()
+
     while True:
         try:
-            print("🚀 Starting bot...")
+            logger.info("Bot started")
             await dp.start_polling(bot)
         except TelegramBadRequest as e:
             if "logged out" in str(e).lower():
-                print("⚠️ Logged out, retry...")
-                await asyncio.sleep(3)
+                logger.warning("Bot logged out, retry in 5 sec")
+                await asyncio.sleep(5)
                 continue
             raise
         except Exception as e:
-            print(f"❌ Error: {e}")
+            logger.exception("Bot crashed: %s", e)
             await asyncio.sleep(5)
 
 
