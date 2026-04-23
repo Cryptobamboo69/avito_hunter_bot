@@ -84,65 +84,73 @@ def _json_ld_item_to_listing(item: dict) -> Listing | None:
     )
 
 
-def _from_links(soup: BeautifulSoup) -> list[Listing]:
-    results: list[Listing] = []
+for a in soup.find_all("a", href=True):
+    href = a["href"]
 
-    for a in soup.find_all("a", href=True):
-        href = a["href"]
+    if not href:
+        continue
 
-        if not href:
-            continue
+    if href.startswith("/"):
+        url = "https://www.avito.ru" + href
+    elif href.startswith("http"):
+        url = href
+    else:
+        continue
 
-        # Только ссылки, похожие на реальные объявления
-        if not _looks_like_listing_href(href):
-            continue
+    # ❌ только реальные объявления
+    if "/item/" not in url:
+        continue
 
-        if href.startswith("/"):
-            url = "https://www.avito.ru" + href
-        elif href.startswith("http"):
-            url = href
-        else:
-            continue
+    text = a.get_text(" ", strip=True).lower()
 
-        if not _looks_like_listing_url(url):
-            continue
+    if not text:
+        continue
 
-        # Отсечь мусор/баннеры/промо
-        if any(x in url for x in [
-            "/travel",
-            "/apps",
-            "/profile",
-            "/brands",
-            "/favorites",
-            "/blocked",
-            "/support",
-            "utm_",
-            "context=",
-        ]):
-            continue
+    # ❌ мусор
+    bad_words = [
+        "доставка",
+        "приложение",
+        "подробнее",
+        "скидки",
+        "путешеств",
+        "аренда",
+        "отель",
+        "квартир",
+        "avito",
+    ]
 
-        text = a.get_text(" ", strip=True)
-        if not text:
-            continue
+    if any(word in text for word in bad_words):
+        continue
 
-        title = text.strip()
-        if len(title) < 10:
-            continue
+    # ✅ строго под задачу
+    good_words = [
+        "nespresso",
+        "essenza",
+        "c30",
+    ]
 
-        price = parse_price(text)
+    if not any(word in text for word in good_words):
+        continue
 
-        results.append(
-            Listing(
-                external_id=url,
-                title=title[:200],
-                url=url,
-                price=price,
-                location=None,
-                description=None,
-                image_url=None,
-                raw={"href": href, "text": text},
-            )
+    title = text.strip()
+    price = parse_price(text)
+
+    # 💰 фильтр цены
+    if price is None or price > 3000:
+        continue
+
+    results.append(
+        Listing(
+            external_id=url,
+            title=title,
+            url=url,
+            price=price,
+            location=None,
+            description=None,
+            image_url=None,
+            raw={"href": href, "text": text},
         )
+    )
 
     return _dedupe(results)
 
