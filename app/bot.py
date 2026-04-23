@@ -9,7 +9,7 @@ from aiogram.exceptions import TelegramBadRequest
 from app.avito.search_client import fetch_html
 from app.avito.parser import parse_search_results
 
-TOKEN = 8782414898:AAHP3UM4xj5kEWt0vTkgAM_UuXXqMYBA6ws
+TOKEN = "8782414898:AAHP3UM4xj5kEWt0vTkgAM_UuXXqMYBA6ws"
 
 logging.basicConfig(level=logging.INFO)
 
