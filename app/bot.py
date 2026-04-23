@@ -499,3 +499,25 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
+    
+import asyncio
+from aiogram.exceptions import TelegramBadRequest
+
+async def main():
+    while True:
+        try:
+            print("🚀 Starting bot...")
+            await dp.start_polling(bot)
+        except TelegramBadRequest as e:
+            if "logged out" in str(e).lower():
+                print("⚠️ Bot was logged out. Restarting...")
+                await asyncio.sleep(2)
+                continue
+            raise
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            await asyncio.sleep(5)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
