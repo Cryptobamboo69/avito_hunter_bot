@@ -64,11 +64,15 @@ MARSELL_BLOCKED = [
 
 SEARCH_PAGE_BLOCKERS = [
     "q=",
+    "query=",
+    "/search",
     "/all/",
     "/brands/",
     "/favorites",
     "/profile",
     "/items",
+    "/rossiya",
+    "/moskva?",
     "travel",
     "avito.ru/apps",
 ]
@@ -113,17 +117,6 @@ def passes_custom_filters(task_name: str, title: str, full_text: str) -> bool:
             return False
 
         if any(word in text_l for word in NESPRESSO_BLOCKED):
-            return False
-
-        good_words = [
-            "рабоч",
-            "исправ",
-            "без дефект",
-            "в хорошем состоянии",
-            "в отличном состоянии",
-            "полностью исправ",
-        ]
-        if not any(word in text_l for word in good_words):
             return False
 
         return True
@@ -231,6 +224,15 @@ async def process_task(message, session: aiohttp.ClientSession, task: dict, max_
                     continue
 
             full_text = normalize_text(title, description)
+
+            if any(x in full_text for x in [
+                "объявлен",
+                "по запросу",
+                "купить товар",
+                "товары для",
+                "похожие объявления",
+            ]):
+                continue
 
             if not passes_custom_filters(task["name"], title, full_text):
                 continue
