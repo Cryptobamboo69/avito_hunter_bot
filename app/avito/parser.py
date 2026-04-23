@@ -13,7 +13,6 @@ def parse_search_results(html: str) -> list[Listing]:
     soup = BeautifulSoup(html, "lxml")
     return _from_json_ld(soup)
 
-
 def _from_json_ld(soup: BeautifulSoup) -> list[Listing]:
     results: list[Listing] = []
 
