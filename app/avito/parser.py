@@ -82,6 +82,7 @@ def _json_ld_item_to_listing(item: dict) -> Listing | None:
     )
 
 
+
 def _from_links(soup: BeautifulSoup) -> list[Listing]:
     results: list[Listing] = []
 
@@ -91,6 +92,11 @@ def _from_links(soup: BeautifulSoup) -> list[Listing]:
         if not href:
             continue
 
+        # 👉 только ссылки с ID (реальные объявления)
+        if not re.search(r"/\d{7,}", href):
+            continue
+
+        # нормализация ссылки
         if href.startswith("/"):
             url = "https://www.avito.ru" + href
         elif href.startswith("http"):
@@ -98,14 +104,23 @@ def _from_links(soup: BeautifulSoup) -> list[Listing]:
         else:
             continue
 
-        if "avito.ru" not in url:
+        # защита от мусора
+        if any(x in url for x in [
+            "/travel",
+            "/apps",
+            "/profile",
+            "/brands",
+            "/favorites",
+            "utm_",
+        ]):
             continue
 
         text = a.get_text(" ", strip=True)
-        if not text:
+
+        if not text or len(text) < 10:
             continue
 
-        title = text.strip()
+        title = text[:200]
         price = parse_price(text)
 
         results.append(
@@ -117,12 +132,11 @@ def _from_links(soup: BeautifulSoup) -> list[Listing]:
                 location=None,
                 description=None,
                 image_url=None,
-                raw={"href": href, "text": text},
+                raw={"href": href},
             )
         )
 
     return _dedupe(results)
-
 
 def _dedupe(items: list[Listing]) -> list[Listing]:
     result: list[Listing] = []
