@@ -8,12 +8,10 @@ import re
 import sqlite3
 from contextlib import closing
 from dataclasses import dataclass
-from html import escape
 from typing import Any
 
 import aiohttp
 from aiogram import Bot, Dispatcher, F
-from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandObject
 from aiogram.types import Message
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -244,7 +242,6 @@ def parse_links(soup: BeautifulSoup) -> list[Listing]:
         if "avito.ru" not in url:
             continue
 
-        # отсекаем откровенный мусор
         if any(x in url for x in ["/brands/", "/favorites", "/profile", "/items", "/search"]):
             continue
 
@@ -282,11 +279,11 @@ async def parse_search_results(session: aiohttp.ClientSession, url: str) -> list
 def format_listing(task_name: str, item: Listing) -> str:
     price_text = f"{item.price} ₽" if item.price is not None else "цена не найдена"
     return (
-        f"🔥 <b>Новое объявление</b>\n"
-        f"<b>Задача:</b> {escape(task_name)}\n"
-        f"<b>Название:</b> {escape(item.title)}\n"
-        f"<b>Цена:</b> {escape(price_text)}\n"
-        f"<b>Ссылка:</b> {escape(item.url)}"
+        f"Новое объявление\n"
+        f"Задача: {task_name}\n"
+        f"Название: {item.title}\n"
+        f"Цена: {price_text}\n"
+        f"Ссылка: {item.url}"
     )
 
 
@@ -325,12 +322,7 @@ async def process_task(
             continue
 
         try:
-            await bot.send_message(
-                chat_id,
-                format_listing(task_name, item),
-                parse_mode=ParseMode.HTML,
-                disable_web_page_preview=False,
-            )
+            await bot.send_message(chat_id, format_listing(task_name, item))
         except Exception as e:
             logger.exception("Send failed for task %s: %s", task_id, e)
 
@@ -415,12 +407,12 @@ async def cmd_list(message: Message) -> None:
     parts: list[str] = []
     for row in tasks:
         parts.append(
-            f"ID {row['id']} | {escape(str(row['name']))}\n"
-            f"URL: {escape(str(row['search_url']))}\n"
+            f"ID {row['id']} | {row['name']}\n"
+            f"URL: {row['search_url']}\n"
             f"max_price={row['max_price']} | every={row['check_interval_sec']}s"
         )
 
-    await message.answer("\n\n".join(parts), parse_mode=ParseMode.HTML)
+    await message.answer("\n\n".join(parts))
 
 
 async def cmd_delete(message: Message, command: CommandObject) -> None:
@@ -480,7 +472,7 @@ async def catch_json(message: Message) -> None:
 async def main() -> None:
     init_db()
 
-    bot = Bot(BOT_TOKEN, default={"parse_mode": ParseMode.HTML})
+    bot = Bot(BOT_TOKEN)
     dp = Dispatcher()
 
     dp.message.register(cmd_start, Command("start"))
