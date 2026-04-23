@@ -65,34 +65,30 @@ def _json_ld_item_to_listing(item: dict) -> Listing | None:
     )
 
 
-def _from_links(soup: BeautifulSoup) -> list[Listing]:
-    results: list[Listing] = []
-    seen_urls: set[str] = set()
-    for link in soup.find_all("a", href=True):
-        href = link["href"]
-        if "/item/" in href or re.search(r"/\w+_\d+$", href):
-            url = href if href.startswith("http") else f"https://www.avito.ru{href}"
-            if url in seen_urls:
-                continue
-            seen_urls.add(url)
-            text = " ".join(link.stripped_strings)
-            title = text[:160] if text else "Без названия"
-            container_text = " ".join(link.parent.stripped_strings) if link.parent else text
-            price = parse_price(container_text)
-            external_id_match = re.search(r"_(\d+)(?:\?.*)?$", url)
-            external_id = external_id_match.group(1) if external_id_match else url
-            results.append(
-                Listing(
-                    external_id=external_id,
-                    title=title,
-                    url=url,
-                    price=price,
-                    location=None,
-                    description=container_text[:1000],
-                    raw={"source": "fallback_link_parser"},
-                )
-            )
-    return _dedupe(results)
+def _from_links(soup):
+    results = []
+
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+
+        if "/item/" not in href:
+            continue
+
+        if href.startswith("/"):
+            url = "https://www.avito.ru" + href
+        else:
+            url = href
+
+        title = a.get_text(strip=True)
+        if not title or len(title) < 10:
+            continue
+
+        results.append({
+            "url": url,
+            "title": title
+        })
+
+    return results
 
 
 def _dedupe(items: list[Listing]) -> list[Listing]:
