@@ -11,12 +11,7 @@ from app.utils.price import parse_price
 
 def parse_search_results(html: str) -> list[Listing]:
     soup = BeautifulSoup(html, "lxml")
-
-    listings = _from_json_ld(soup)
-    if listings:
-        return listings
-
-    return _from_links(soup)
+    return _from_json_ld(soup)
 
 
 def _from_json_ld(soup: BeautifulSoup) -> list[Listing]:
