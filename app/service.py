@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import aiohttp
@@ -21,60 +22,31 @@ RESERVE_WORDS = [
 ]
 
 NESPRESSO_BLOCKED = [
-    "капсул",
-    "насос",
-    "помпа",
-    "запчаст",
-    "ремонт",
-    "корпус",
-    "плата",
-    "держатель",
-    "лоток",
-    "контейнер",
-    "резервуар",
-    "шланг",
-    "кнопк",
-    "термоблок",
-    "аксессуар",
-    "подставк",
-    "уплотн",
-    "прокладк",
-    "фильтр",
-    "бойлер",
-    "разбор",
-    "на детали",
-    "на запчасти",
-    "неисправ",
-    "для кофемашин",
+    "капсул", "насос", "помпа", "запчаст", "ремонт", "корпус",
+    "плата", "держатель", "лоток", "контейнер", "резервуар",
+    "шланг", "кнопк", "термоблок", "аксессуар", "подставк",
+    "уплотн", "прокладк", "фильтр", "бойлер", "разбор",
+    "на детали", "на запчасти", "неисправ", "для кофемашин",
     "для nespresso",
 ]
 
 MARSELL_BLOCKED = [
-    "подошва",
-    "стельк",
-    "шнурк",
-    "ремонт",
-    "краска",
-    "крем",
-    "щетка",
-    "набойк",
-    "запчаст",
-    "подметк",
+    "подошва", "стельк", "шнурк", "ремонт", "краска", "крем",
+    "щетка", "набойк", "запчаст", "подметк",
 ]
 
 SEARCH_PAGE_BLOCKERS = [
-    "q=",
-    "query=",
-    "/search",
-    "/all/",
-    "/brands/",
-    "/favorites",
-    "/profile",
-    "/items",
-    "/rossiya",
-    "/moskva?",
-    "travel",
+    "q=", "query=", "/search", "/all/", "/brands/", "/favorites",
+    "/profile", "/items", "/rossiya", "/moskva?", "travel",
     "avito.ru/apps",
+]
+
+SEO_TEXT_BLOCKERS = [
+    "объявлен",
+    "по запросу",
+    "купить товар",
+    "товары для",
+    "похожие объявления",
 ]
 
 
@@ -98,6 +70,19 @@ def price_to_int(price_raw: Any) -> int | None:
 def is_bad_link(link: str) -> bool:
     link_l = link.lower()
     return any(blocker in link_l for blocker in SEARCH_PAGE_BLOCKERS)
+
+
+def has_allowed_marsell_size(text: str) -> bool:
+    patterns = [
+        r"(?<!\d)40(?!\d)",
+        r"(?<!\d)40[\.,]5(?!\d)",
+        r"(?<!\d)41(?!\d)",
+        r"размер\s*40(?!\d)",
+        r"размер\s*40[\.,]5(?!\d)",
+        r"размер\s*41(?!\d)",
+        r"\b40\s*-\s*41\b",
+    ]
+    return any(re.search(pattern, text) for pattern in patterns)
 
 
 def passes_custom_filters(task_name: str, title: str, full_text: str) -> bool:
@@ -127,13 +112,7 @@ def passes_custom_filters(task_name: str, title: str, full_text: str) -> bool:
 
         has_target = any(
             word in text_l
-            for word in [
-                "ботин",
-                "туфл",
-                "лофер",
-                "дерби",
-                "обув",
-            ]
+            for word in ["ботин", "туфл", "лофер", "дерби", "обув"]
         )
         if not has_target:
             return False
@@ -142,6 +121,9 @@ def passes_custom_filters(task_name: str, title: str, full_text: str) -> bool:
             return False
 
         if any(word in text_l for word in MARSELL_BLOCKED):
+            return False
+
+        if not has_allowed_marsell_size(text_l):
             return False
 
         return True
@@ -159,6 +141,9 @@ def passes_custom_filters(task_name: str, title: str, full_text: str) -> bool:
         if any(word in text_l for word in MARSELL_BLOCKED):
             return False
 
+        if not has_allowed_marsell_size(text_l):
+            return False
+
         return True
 
     return True
@@ -173,9 +158,7 @@ def extract_item_fields(item: Any) -> tuple[str, str, Any, str]:
         return title, link, price_raw, description
 
     title = str(getattr(item, "title", "")).strip()
-    link = str(
-        getattr(item, "link", "") or getattr(item, "url", "")
-    ).strip()
+    link = str(getattr(item, "link", "") or getattr(item, "url", "")).strip()
     price_raw = getattr(item, "price", None)
     description = str(getattr(item, "description", "")).strip()
     return title, link, price_raw, description
@@ -219,19 +202,15 @@ async def process_task(message, session: aiohttp.ClientSession, task: dict, max_
 
             price_value = price_to_int(price_raw)
 
-            if task.get("max_price") is not None and price_value is not None:
+            if task.get("max_price") is not None:
+                if price_value is None:
+                    continue
                 if price_value > int(task["max_price"]):
                     continue
 
             full_text = normalize_text(title, description)
 
-            if any(x in full_text for x in [
-                "объявлен",
-                "по запросу",
-                "купить товар",
-                "товары для",
-                "похожие объявления",
-            ]):
+            if any(x in full_text for x in SEO_TEXT_BLOCKERS):
                 continue
 
             if not passes_custom_filters(task["name"], title, full_text):
