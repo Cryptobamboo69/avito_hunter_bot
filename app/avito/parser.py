@@ -2,24 +2,29 @@ from bs4 import BeautifulSoup
 
 
 def parse_search_results(html: str):
-    """
-    Парсит HTML выдачи Avito и возвращает список объявлений
-    """
     soup = BeautifulSoup(html, "html.parser")
 
     results = []
 
-    items = soup.select('[data-marker="item"]')
+    # основной контейнер объявлений
+    items = soup.select('div[data-marker="item"]')
 
     for item in items:
         try:
-            title_tag = item.select_one('[itemprop="name"]')
-            price_tag = item.select_one('[itemprop="price"]')
-            link_tag = item.select_one("a[itemprop='url']")
-
+            # заголовок
+            title_tag = item.select_one('h3')
             title = title_tag.get_text(strip=True) if title_tag else "Без названия"
+
+            # цена (новый селектор Avito)
+            price_tag = item.select_one('[data-marker="item-price"]')
             price = price_tag.get_text(strip=True) if price_tag else "Цена не указана"
-            link = "https://www.avito.ru" + link_tag["href"] if link_tag else None
+
+            # ссылка
+            link_tag = item.select_one('a[data-marker="item-title"]')
+            link = None
+
+            if link_tag and link_tag.get("href"):
+                link = "https://www.avito.ru" + link_tag["href"]
 
             if link:
                 results.append({
@@ -35,9 +40,6 @@ def parse_search_results(html: str):
 
 
 def _dedupe(items):
-    """
-    Убирает дубли по ссылке
-    """
     seen = set()
     unique = []
 
