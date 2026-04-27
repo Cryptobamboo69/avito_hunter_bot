@@ -1,40 +1,39 @@
+import json
 from bs4 import BeautifulSoup
 
 
 def parse_search_results(html: str):
     soup = BeautifulSoup(html, "html.parser")
 
+    scripts = soup.find_all("script")
+
     results = []
 
-    # основной контейнер объявлений
-    items = soup.select('div[data-marker="item"]')
+    for script in scripts:
+        if script.string and "window.__initialData__" in script.string:
+            try:
+                json_text = script.string.split("=", 1)[1].strip().rstrip(";")
+                data = json.loads(json_text)
 
-    for item in items:
-        try:
-            # заголовок
-            title_tag = item.select_one('h3')
-            title = title_tag.get_text(strip=True) if title_tag else "Без названия"
+                items = (
+                    data.get("catalog", {})
+                    .get("items", [])
+                )
 
-            # цена (новый селектор Avito)
-            price_tag = item.select_one('[data-marker="item-price"]')
-            price = price_tag.get_text(strip=True) if price_tag else "Цена не указана"
+                for item in items:
+                    title = item.get("title")
+                    price = item.get("price", {}).get("string")
+                    link = "https://www.avito.ru" + item.get("urlPath", "")
 
-            # ссылка
-            link_tag = item.select_one('a[data-marker="item-title"]')
-            link = None
+                    if title and link:
+                        results.append({
+                            "title": title,
+                            "price": price,
+                            "link": link
+                        })
 
-            if link_tag and link_tag.get("href"):
-                link = "https://www.avito.ru" + link_tag["href"]
-
-            if link:
-                results.append({
-                    "title": title,
-                    "price": price,
-                    "link": link
-                })
-
-        except Exception:
-            continue
+            except Exception:
+                continue
 
     return _dedupe(results)
 
