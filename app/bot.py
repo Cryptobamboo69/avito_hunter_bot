@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 bot = Bot(
     token=TOKEN,
-    default=DefaultBotProperties(parse_mode="HTML"),
+    
 )
 dp = Dispatcher()
 
