@@ -59,7 +59,12 @@ async def fetch_html(session: aiohttp.ClientSession | None, url: str) -> str:
 
             await page.wait_for_timeout(5000)
 
-            html = await page.content()
+await page.wait_for_selector(
+    '[data-marker="item"]',
+    timeout=10000
+)
+
+html = await page.content()
 
             logger.info(
                 "Playwright fetched %s len=%s has_data_marker=%s",
