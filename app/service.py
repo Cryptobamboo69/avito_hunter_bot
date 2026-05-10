@@ -13,45 +13,34 @@ logger = logging.getLogger(__name__)
 
 
 RESERVE_WORDS = [
-    "забронир",
-    "зарезерв",
-    "бронь",
-    "в броне",
-    "в резерве",
-    "резерв",
+    "заброни", "зарезерв", "бронь", "в броне", "в резерве", "резерв",
 ]
 
 NESPRESSO_BLOCKED = [
-    "капсул", "насос", "помпа", "запчаст", "ремонт", "корпус",
-    "плата", "держатель", "лоток", "контейнер", "резервуар",
-    "шланг", "кнопк", "термоблок", "аксессуар", "подставк",
-    "уплотн", "прокладк", "фильтр", "бойлер", "разбор",
-    "на детали", "на запчасти", "неисправ", "для кофемашин",
-    "для nespresso",
+    "капсул", "насос", "помпа", "запчаст", "ремонт", "плата", "держатель",
+    "лоток", "контейнер", "шланг", "кнопк", "термоблок", "аксессуар",
+    "уплотн", "прокладк", "фильтр", "бойлер", "на детали", "на запчасти",
+    "неисправ", "для nespresso",
 ]
 
 MARSELL_BLOCKED = [
-    "подошва", "стельк", "шнурк", "ремонт", "краска", "крем",
-    "щетка", "набойк", "запчаст", "подметк",
+    "подошва", "стельк", "шнурк", "ремонт", "щетка", "набоек",
+    "запчаст", "подметк",
 ]
 
 SEARCH_PAGE_BLOCKERS = [
-    "q=", "query=", "/search", "/all/", "/brands/", "/favorites",
-    "/profile", "/items", "/rossiya", "/moskva?", "travel",
-    "avito.ru/apps",
+    "q=", "query=", "/search", "/all/", "/brands", "/profile",
+    "/items", "/rossiya", "/moskva", "avito.ru/apps",
 ]
 
 SEO_TEXT_BLOCKERS = [
-    "объявлен",
-    "по запросу",
-    "купить товар",
-    "товары для",
+    "объявлен", "по запросу", "купить товар", "товары для",
     "похожие объявления",
 ]
 
 
 def normalize_text(*parts: Any) -> str:
-    return " ".join(str(p or "") for p in parts).lower().strip()
+    return " ".join(str(p or "") for p in parts).lower()
 
 
 def is_reserved(text: str) -> bool:
@@ -112,7 +101,7 @@ def passes_custom_filters(task_name: str, title: str, full_text: str) -> bool:
 
         has_target = any(
             word in text_l
-            for word in ["ботин", "туфл", "лофер", "дерби", "обув"]
+            for word in ["ботин", "туфл", "лофер", "дерби", "оксфорд", "обув"]
         )
         if not has_target:
             return False
@@ -164,18 +153,28 @@ def extract_item_fields(item: Any) -> tuple[str, str, Any, str]:
     return title, link, price_raw, description
 
 
-def format_result_message(task_name: str, title: str, link: str, price_value: int | None) -> str:
+def format_result_message(
+    task_name: str,
+    title: str,
+    link: str,
+    price_value: int | None,
+) -> str:
     price_text = f"{price_value} ₽" if price_value is not None else "не указана"
     return (
-        f"<b>Новое объявление</b>\n"
+        "Новое объявление\n"
         f"Задача: {task_name}\n"
-        f"Название: {title}\n"
+        f"Название: {title[:300]}\n"
         f"Цена: {price_text}\n"
         f"Ссылка: {link}"
     )
 
 
-async def process_task(message, session: aiohttp.ClientSession, task: dict, max_send: int = 5) -> int:
+async def process_task(
+    message,
+    session: aiohttp.ClientSession,
+    task: dict[str, Any],
+    max_send: int = 5,
+) -> int:
     try:
         html = await fetch_html(session, task["search_url"])
         items = parse_search_results(html)
@@ -216,7 +215,13 @@ async def process_task(message, session: aiohttp.ClientSession, task: dict, max_
             if not passes_custom_filters(task["name"], title, full_text):
                 continue
 
-            text = format_result_message(task["name"], title, link, price_value)
+            text = format_result_message(
+                task_name=task["name"],
+                title=title,
+                link=link,
+                price_value=price_value,
+            )
+
             await message.answer(text[:3500])
             sent += 1
 
@@ -229,12 +234,12 @@ async def process_task(message, session: aiohttp.ClientSession, task: dict, max_
         return sent
 
     except Exception as e:
-    logger.exception("Task error")
+        logger.exception("Task error")
 
-    short_error = str(e).split("Browser logs:")[0].strip()
+        short_error = str(e).split("Browser logs:")[0].strip()
 
-    await message.answer(
-        f"Ошибка в задаче {task['name']}:\n{short_error[:500]}"
-    )
+        await message.answer(
+            f"Ошибка в задаче {task['name']}:\n{short_error[:500]}"
+        )
 
-    return 0
+        return 0
