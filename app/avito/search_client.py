@@ -49,9 +49,9 @@ async def fetch_html(session: aiohttp.ClientSession | None, url: str) -> str:
         page = await context.new_page()
 
         try:
-            logger.info("Playwright opening: %s", url)
+        logger.info("Playwright opening: %s", url)
 
-                    await page.goto(
+        await page.goto(
             url,
             wait_until="domcontentloaded",
             timeout=60000,
