@@ -6,10 +6,10 @@ from contextlib import closing
 
 import aiohttp
 from aiogram import Bot, Dispatcher, types
-from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import Command
 
 from app.service import process_task
+from app.avito.search_client import fetch_html
 
 
 TOKEN = os.getenv("BOT_TOKEN", "").strip()
@@ -21,10 +21,7 @@ if not TOKEN:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-bot = Bot(
-    token=TOKEN,
-    
-)
+bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 waiting_for_json: set[int] = set()
@@ -75,6 +72,19 @@ def list_tasks():
         return cur.fetchall()
 
 
+def get_task_by_id(task_id: int):
+    with closing(get_conn()) as conn:
+        cur = conn.execute(
+            """
+            SELECT id, name, search_url, max_price, check_interval_sec
+            FROM tasks
+            WHERE id = ?
+            """,
+            (task_id,),
+        )
+        return cur.fetchone()
+
+
 def delete_task(task_id: int):
     with closing(get_conn()) as conn:
         cur = conn.execute(
@@ -93,7 +103,9 @@ async def cmd_start(message: types.Message):
         "/add_json — добавить задачу JSON\n"
         "/list — список задач\n"
         "/delete ID — удалить задачу\n"
-        "/checkall — проверить все задачи"
+        "/checkall — проверить все задачи\n"
+        "/debug — диагностика HTML первой задачи\n"
+        "/debug ID — диагностика HTML конкретной задачи"
     )
 
 
@@ -103,7 +115,7 @@ async def cmd_add_json(message: types.Message):
     await message.answer(
         "Пришли JSON следующим сообщением.\n\n"
         "Пример:\n"
-        '{"name":"nespresso_c30","search_url":"https://www.avito.ru/moskva?q=nespresso+essenza+mini+c30&priceMax=3000","max_price":3000,"check_interval_sec":180}'
+        '{"name":"test_nespresso","search_url":"https://www.avito.ru/moskva/bytovaya_tehnika?q=nespresso","max_price":3000,"check_interval_sec":180}'
     )
 
 
@@ -162,6 +174,71 @@ async def cmd_checkall(message: types.Message):
             }
             await process_task(message, session, task)
             await asyncio_sleep_safe()
+
+
+@dp.message(Command("debug"))
+async def cmd_debug(message: types.Message):
+    parts = (message.text or "").split()
+
+    if len(parts) == 2:
+        try:
+            task_id = int(parts[1])
+        except ValueError:
+            await message.answer("Формат: /debug ID")
+            return
+        row = get_task_by_id(task_id)
+    else:
+        tasks = list_tasks()
+        row = tasks[0] if tasks else None
+
+    if not row:
+        await message.answer("Нет задачи для диагностики. Сначала добавь задачу через /add_json.")
+        return
+
+    task_id = row[0]
+    task_name = row[1]
+    url = row[2]
+
+    await message.answer(f"Диагностика задачи ID {task_id}: {task_name}\nОткрываю URL...")
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            html = await fetch_html(session, url)
+
+        html_l = html.lower()
+
+        checks = {
+            "len": len(html),
+            "data-marker": "data-marker" in html_l,
+            "catalog-serp": "catalog-serp" in html_l,
+            "item-title": "item-title" in html_l,
+            "captcha": "captcha" in html_l or "капча" in html_l,
+            "blocked": "blocked" in html_l or "доступ ограничен" in html_l,
+            "avito": "avito" in html_l,
+            "cloudflare": "cloudflare" in html_l,
+            "robot": "robot" in html_l or "робот" in html_l,
+        }
+
+        report = (
+            f"DEBUG ID {task_id}: {task_name}\n"
+            f"URL: {url}\n\n"
+            f"HTML length: {checks['len']}\n"
+            f"data-marker: {checks['data-marker']}\n"
+            f"catalog-serp: {checks['catalog-serp']}\n"
+            f"item-title: {checks['item-title']}\n"
+            f"captcha: {checks['captcha']}\n"
+            f"blocked: {checks['blocked']}\n"
+            f"avito: {checks['avito']}\n"
+            f"cloudflare: {checks['cloudflare']}\n"
+            f"robot: {checks['robot']}\n\n"
+            f"HTML preview:\n{html[:1000]}"
+        )
+
+        await message.answer(report[:3500])
+
+    except Exception as e:
+        logger.exception("Debug error")
+        await message.answer(f"Ошибка debug:\n{str(e)[:1000]}")
 
 
 @dp.message()
