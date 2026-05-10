@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import logging
 
@@ -19,21 +17,22 @@ class AvitoSearchClient:
         return None
 
 
-async def fetch_html(session: aiohttp.ClientSession | None, url: str) -> str:
+async def fetch_html(
+    session: aiohttp.ClientSession | None,
+    url: str,
+) -> str:
+
     delay = getattr(settings, "min_request_delay", 2)
 
     async with async_playwright() as p:
+
         browser = await p.chromium.launch(
             headless=True,
             args=[
-    "--no-sandbox",
-    "--disable-setuid-sandbox",
-    "--disable-dev-shm-usage",
-    "--disable-gpu",
-    "--no-first-run",
-    "--no-zygote",
-    "--single-process",
-],
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-blink-features=AutomationControlled",
+            ],
         )
 
         context = await browser.new_context(
@@ -49,22 +48,22 @@ async def fetch_html(session: aiohttp.ClientSession | None, url: str) -> str:
         page = await context.new_page()
 
         try:
-        logger.info("Playwright opening: %s", url)
+            logger.info("Playwright opening: %s", url)
 
-        await page.goto(
-            url,
-            wait_until="domcontentloaded",
-            timeout=60000,
-        )
+            await page.goto(
+                url,
+                wait_until="domcontentloaded",
+                timeout=60000,
+            )
 
-        await page.wait_for_timeout(5000)
+            await page.wait_for_timeout(5000)
 
-        await page.wait_for_selector(
-            '[data-marker="item"]',
-            timeout=10000
-        )
+            await page.wait_for_selector(
+                '[data-marker="item"]',
+                timeout=10000
+            )
 
-        html = await page.content()
+            html = await page.content()
 
             logger.info(
                 "Playwright fetched %s len=%s has_data_marker=%s",
@@ -74,6 +73,7 @@ async def fetch_html(session: aiohttp.ClientSession | None, url: str) -> str:
             )
 
             await asyncio.sleep(delay)
+
             return html
 
         finally:
