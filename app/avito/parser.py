@@ -57,8 +57,7 @@ def parse_html_cards(soup: BeautifulSoup) -> list[dict[str, Any]]:
         title = extract_title(card)
         price = extract_price(card)
         link = extract_link(card)
-        description = card.get_text(" ", strip=True)
-
+        description = ""
         if not title or not link:
             continue
 
