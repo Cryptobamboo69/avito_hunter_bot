@@ -230,5 +230,5 @@ async def process_task(message, session: aiohttp.ClientSession, task: dict, max_
 
     except Exception as e:
         logger.exception("Task error")
-        await message.answer(f"Ошибка в задаче {task['name']}: {e}")
+        await message.answer(f"Ошибка в задаче {task['name']}: {str(e)[:1000]}")
         return 0
