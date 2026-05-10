@@ -1,7 +1,7 @@
 import asyncio
 import logging
-
 import aiohttp
+
 from playwright.async_api import async_playwright
 
 from app.config import settings
@@ -17,15 +17,10 @@ class AvitoSearchClient:
         return None
 
 
-async def fetch_html(
-    session: aiohttp.ClientSession | None,
-    url: str,
-) -> str:
-
+async def fetch_html(session: aiohttp.ClientSession, url: str) -> str:
     delay = getattr(settings, "min_request_delay", 2)
 
     async with async_playwright() as p:
-
         browser = await p.chromium.launch(
             headless=True,
             args=[
@@ -58,10 +53,15 @@ async def fetch_html(
 
             await page.wait_for_timeout(5000)
 
-            await page.wait_for_selector(
-    'a[href*="/item/"], [data-marker="item"], div[data-marker="catalog-serp"]',
-    timeout=20000
-)
+            try:
+                await page.wait_for_selector(
+                    'a[href*="/item/"], [data-marker="item"], div[data-marker="catalog-serp"]',
+                    timeout=10000
+                )
+            except Exception:
+                logger.warning(
+                    "Avito cards selector not found, using current page HTML"
+                )
 
             html = await page.content()
 
