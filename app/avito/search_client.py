@@ -59,9 +59,9 @@ async def fetch_html(
             await page.wait_for_timeout(5000)
 
             await page.wait_for_selector(
-                '[data-marker="item"]',
-                timeout=10000
-            )
+    'a[href*="/item/"], [data-marker="item"], div[data-marker="catalog-serp"]',
+    timeout=20000
+)
 
             html = await page.content()
 
