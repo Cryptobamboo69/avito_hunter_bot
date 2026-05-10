@@ -26,10 +26,14 @@ async def fetch_html(session: aiohttp.ClientSession | None, url: str) -> str:
         browser = await p.chromium.launch(
             headless=True,
             args=[
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-blink-features=AutomationControlled",
-            ],
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+    "--no-first-run",
+    "--no-zygote",
+    "--single-process",
+],
         )
 
         context = await browser.new_context(
