@@ -217,7 +217,7 @@ async def process_task(message, session: aiohttp.ClientSession, task: dict, max_
                 continue
 
             text = format_result_message(task["name"], title, link, price_value)
-            await message.answer(text)
+            await message.answer(text[:3500])
             sent += 1
 
             if sent >= max_send:
